@@ -12,3 +12,9 @@ sudo apt install libcurl4-openssl-dev
 10.age         10.cityName
 11.height     11.mantaghe
 12.weight
+
+
+
+type 1 = normal
+type 2 = bus
+type 3 = admin
