@@ -1,0 +1,14 @@
+sudo apt install libcurl4-openssl-dev
+
+1.type
+2.name
+3.family
+4.natCode
+5.username
+6.password
+7.email
+8.CoronaCode
+9.bloodGroup  9.placeName
+10.age         10.cityName
+11.height     11.mantaghe
+12.weight
