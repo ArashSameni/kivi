@@ -52,12 +52,27 @@ typedef struct user
     char password[51];
     char email[101];
     int coronaCode;
+    int codeStamp;
     union
     {
         normalInfo normalinfo;
         busInfo businfo;
     };
 } user;
+
+typedef struct hospital
+{
+    int id;
+    char name[101];
+    int areaId;
+} hospital;
+
+typedef struct message
+{
+    int fromId;
+    int toId;
+    char text[1001];
+} message;
 
 void showLogo();
 void showMainMenu();
@@ -66,10 +81,11 @@ void loginMenu();
 void resetPasswordMenu();
 void panelMenu(user loggedUser);
 void updateUser(user theUser, bool shouldUpdateInfo);
+void changeCodeRecursive(int userId, int cCode);
 char *getInputWithSpace(int size, char *name);
 char *getNatCode();
 char *getUsername();
-char *getPassword();
+char *getPassword(bool repeat);
 char *getEmail();
 char *getBloodGroup();
 int getPositiveInt(char *name, bool optional);
@@ -77,18 +93,25 @@ int coronaTest();
 int ask(char *question);
 int getIdByNatCode(char *natCode);
 int alreadyVisitedu(int userId1, int userId2); //user // 0 : not found, 1 : UserId1 = loggedinuser, 2 : UserId2 = loggedinuser
+int cCodeByAreaId(int areaId);
+int usersCountBycCode(int cCode, int stamp);
 bool natCodeExists(char *natCode);
 bool usernameExists(char *username);
 bool alreadyVisiteda(int userId, int areaId); //area
 bool resetPassUserExists(char *username, char *email, char *natCode);
+bool areaExists(int areaId);
 user login(char *username, char *password);
 user getUserById(int userId);
 user editNormalProfile(user loggedUser);
 user editBusProfile(user loggedUser);
 user *getUsersByAreaId(int areaId, int *count);
 user *getAllUsers(int *count);
+user *visitedAreaUsers(int areaId, int *count);
+hospital *getAllHospitals(int *count);
+hospital *getHospitalsByAreaId(int areaId, int *count);
 visits getVisitedAreas(int userId);
 visits getVisitedUsers(int userId);
+message *getMessagesById(int toId, int *count);
 
 void finish_with_error(MYSQL *con)
 {
@@ -312,45 +335,35 @@ void createAccount()
                     }
                 }
 
-                password = getPassword();
-                if (strcmp(password, "-1") == 0)
+                char *repeatOfPass = "";
+                password = getPassword(false);
+                while (strcmp(password, repeatOfPass) != 0)
+                {
+                    if (strcmp(password, "-1") == 0)
+                        break;
+
+                    char *repeatOfPass = getPassword(true);
+                    while (strcmp(password, repeatOfPass) != 0)
+                    {
+                        if (strcmp(repeatOfPass, "-1") == 0)
+                            break;
+                        else
+                        {
+                            if (strcmp(repeatOfPass, password) != 0)
+                                puts(RESET FRED "The password and repeat of password dont match!" RESET FGREEN);
+                            repeatOfPass = getPassword(true);
+                        }
+                    }
+                    if (strcmp(repeatOfPass, "-1") == 0)
+                        password = getPassword(false);
+                    else
+                        break;
+                }
+                if (!strcmp(password, "-1"))
                 {
                     goBack = true;
                     break;
                 }
-
-                char repeatOfPass[51];
-                while (strcmp(repeatOfPass, password))
-                {
-                    int i;
-                    char ch1;
-                    printf(RESET FGREEN "\nRepeat Password: " RESET FWHITE);
-                    for (i = 0; i < 50; i++)
-                    {
-                        ch1 = getch();
-                        if (ch1 != 10)
-                        {
-                            if (ch1 != 127)
-                            {
-                                printf("*");
-                                repeatOfPass[i] = ch1;
-                            }
-                            else if (i > 0)
-                            {
-                                printf("\b \b");
-                                i -= 2;
-                            }
-                            else
-                                i = -1; // To not remove other strings!
-                        }
-                        else
-                            break;
-                    }
-                    repeatOfPass[i] = '\0';
-                    if (strcmp(repeatOfPass, password))
-                        puts(RESET FRED "\nThe password and repeat of password dont match!" RESET FGREEN);
-                }
-                printf("%c", '\n');
 
                 email = getEmail();
                 if (strcmp(email, "-1") == 0)
@@ -388,8 +401,8 @@ void createAccount()
                 }
 
                 char sql[5000];
-                sprintf(sql, "INSERT INTO Users (Type, FirstName, LastName, NationalCode, Username, Password, Email, CoronaCode) VALUES (%d, '%s', '%s', '%s', '%s', '%s', '%s', %d)",
-                        1, name, family, natCode, username, encrypt(password), email, 1);
+                sprintf(sql, "INSERT INTO Users (Type, FirstName, LastName, NationalCode, Username, Password, Email, CoronaCode, CodeStamp) VALUES (%d, '%s', '%s', '%s', '%s', '%s', '%s', %d, %d)",
+                        1, name, family, natCode, username, encrypt(password), email, 1, (int)time(0));
                 if (mysql_query(con, sql))
                     finish_with_error(con);
                 int userId = mysql_insert_id(con);
@@ -398,6 +411,7 @@ void createAccount()
                         userId, bloodGroup, age, height, weight);
                 if (mysql_query(con, sql))
                     finish_with_error(con);
+                break;
             }
             else if (Choosed == 2)
             {
@@ -452,45 +466,35 @@ void createAccount()
                     }
                 }
 
-                password = getPassword();
-                if (strcmp(password, "-1") == 0)
+                char *repeatOfPass = "";
+                password = getPassword(false);
+                while (strcmp(password, repeatOfPass) != 0)
+                {
+                    if (strcmp(password, "-1") == 0)
+                        break;
+
+                    char *repeatOfPass = getPassword(true);
+                    while (strcmp(password, repeatOfPass) != 0)
+                    {
+                        if (strcmp(repeatOfPass, "-1") == 0)
+                            break;
+                        else
+                        {
+                            if (strcmp(repeatOfPass, password) != 0)
+                                puts(RESET FRED "The password and repeat of password dont match!" RESET FGREEN);
+                            repeatOfPass = getPassword(true);
+                        }
+                    }
+                    if (strcmp(repeatOfPass, "-1") == 0)
+                        password = getPassword(false);
+                    else
+                        break;
+                }
+                if (!strcmp(password, "-1"))
                 {
                     goBack = true;
                     break;
                 }
-
-                char repeatOfPass[51];
-                while (strcmp(repeatOfPass, password))
-                {
-                    int i;
-                    char ch1;
-                    printf(RESET FGREEN "\nRepeat Password: " RESET FWHITE);
-                    for (i = 0; i < 50; i++)
-                    {
-                        ch1 = getch();
-                        if (ch1 != 10)
-                        {
-                            if (ch1 != 127)
-                            {
-                                printf("*");
-                                repeatOfPass[i] = ch1;
-                            }
-                            else if (i > 0)
-                            {
-                                printf("\b \b");
-                                i -= 2;
-                            }
-                            else
-                                i = -1; // To not remove other strings!
-                        }
-                        else
-                            break;
-                    }
-                    repeatOfPass[i] = '\0';
-                    if (strcmp(repeatOfPass, password))
-                        puts(RESET FRED "\nThe password and repeat of password dont match!" RESET FGREEN);
-                }
-                printf("%c", '\n');
 
                 email = getEmail();
                 if (strcmp(email, "-1") == 0)
@@ -521,8 +525,8 @@ void createAccount()
                 }
 
                 char sql[5000];
-                sprintf(sql, "INSERT INTO Users (Type, FirstName, LastName, NationalCode, Username, Password, Email, CoronaCode) VALUES (%d, '%s', '%s', '%s', '%s', '%s', '%s', %d)",
-                        2, name, family, natCode, username, encrypt(password), email, 1);
+                sprintf(sql, "INSERT INTO Users (Type, FirstName, LastName, NationalCode, Username, Password, Email, CoronaCode, CodeStamp) VALUES (%d, '%s', '%s', '%s', '%s', '%s', '%s', %d, %d)",
+                        2, name, family, natCode, username, encrypt(password), email, 1, (int)time(0));
                 if (mysql_query(con, sql))
                     finish_with_error(con);
                 int userId = mysql_insert_id(con);
@@ -531,6 +535,7 @@ void createAccount()
                         userId, placeName, cityName, mantaghe);
                 if (mysql_query(con, sql))
                     finish_with_error(con);
+                break;
             }
         }
         if (goBack)
@@ -568,8 +573,7 @@ void loginMenu()
         bool loggedIn = false;
         if (usernameExists(username))
         {
-            password = getPassword();
-            printf("\n");
+            password = getPassword(false);
             if (strcmp(password, "-1") != 0)
             {
                 encrypt(password);
@@ -577,11 +581,17 @@ void loginMenu()
                 user loggedUser = login(username, password);
 
                 if (loggedUser.id == 0)
+                {
                     puts(RESET FRED "Password is incorrect!" RESET FGREEN);
+                    getchar();
+                }
                 else
                 {
                     if (loggedUser.coronaCode == -1)
+                    {
                         printf(RESET FWHITE "Sorry, but you are %s :))!", RESET BBLACK FRED "DEAD" RESET FWHITE);
+                        getchar();
+                    }
                     else
                     {
                         panelMenu(loggedUser);
@@ -591,9 +601,10 @@ void loginMenu()
             }
         }
         else
+        {
             puts(RESET FRED "Username not found!" RESET FGREEN);
-        if (!loggedIn)
             getchar();
+        }
     }
     if (!goBack)
     {
@@ -636,45 +647,35 @@ void resetPasswordMenu()
             if (resetPassUserExists(username, email, natCode))
             {
                 printf(RESET FGREEN "New "); //To print new password
-                password = getPassword();
-                if (strcmp(password, "-1") == 0)
+                char *repeatOfPass = "";
+                password = getPassword(false);
+                while (strcmp(password, repeatOfPass) != 0)
+                {
+                    if (strcmp(password, "-1") == 0)
+                        break;
+
+                    char *repeatOfPass = getPassword(true);
+                    while (strcmp(password, repeatOfPass) != 0)
+                    {
+                        if (strcmp(repeatOfPass, "-1") == 0)
+                            break;
+                        else
+                        {
+                            if (strcmp(repeatOfPass, password) != 0)
+                                puts(RESET FRED "The password and repeat of password dont match!" RESET FGREEN);
+                            repeatOfPass = getPassword(true);
+                        }
+                    }
+                    if (strcmp(repeatOfPass, "-1") == 0)
+                        password = getPassword(false);
+                    else
+                        break;
+                }
+                if (!strcmp(password, "-1"))
                 {
                     goBack = true;
                     break;
                 }
-
-                char repeatOfPass[51];
-                while (strcmp(repeatOfPass, password))
-                {
-                    int i;
-                    char ch1;
-                    printf(RESET FGREEN "\nRepeat Password: " RESET FWHITE);
-                    for (i = 0; i < 50; i++)
-                    {
-                        ch1 = getch();
-                        if (ch1 != 10)
-                        {
-                            if (ch1 != 127)
-                            {
-                                printf("*");
-                                repeatOfPass[i] = ch1;
-                            }
-                            else if (i > 0)
-                            {
-                                printf("\b \b");
-                                i -= 2;
-                            }
-                            else
-                                i = -1; // To not remove other strings!
-                        }
-                        else
-                            break;
-                    }
-                    repeatOfPass[i] = '\0';
-                    if (strcmp(repeatOfPass, password))
-                        puts(RESET FRED "\nThe password and repeat of password dont match!" RESET FGREEN);
-                }
-                printf("%c", '\n');
 
                 char sql[5000];
                 sprintf(sql, "UPDATE Users SET Password='%s' WHERE Username='%s'",
@@ -727,7 +728,8 @@ char *getInputWithSpace(int size, char *name)
             printf(" should be less than %d letters!\n", size);
         }
     }
-    return removeNL(input);
+    input[strlen(input) - 1] = '\0';
+    return input;
 }
 
 char *getNatCode()
@@ -774,7 +776,7 @@ char *getUsername()
     return strlwr(username);
 }
 
-char *getPassword()
+char *getPassword(bool repeat)
 {
     char *password = malloc(sizeof(char) * (PasswordSize + 1));
     *password = '\0';
@@ -782,7 +784,10 @@ char *getPassword()
     {
         int i;
         char ch1;
-        printf(RESET FGREEN "Password: " RESET FWHITE);
+        if (repeat)
+            printf(RESET FGREEN "Repeat Password: " RESET FWHITE);
+        else
+            printf(RESET FGREEN "Password: " RESET FWHITE);
         for (i = 0; i < PasswordSize; i++)
         {
             ch1 = getch();
@@ -806,6 +811,7 @@ char *getPassword()
         if (len(password) < 6 && strcmp(password, "-1") != 0)
             puts(RESET FRED "\nThe password should be more than 6 letters!" RESET FGREEN);
     }
+    printf("\n");
     return password;
 }
 
@@ -891,6 +897,24 @@ void panelMenu(user loggedUser)
     printf(CLEAR);
     if (loggedUser.type == 1)
     {
+        if (loggedUser.coronaCode > 1 && loggedUser.coronaCode != 4)
+        {
+            int nowUnix = (int)time(0);
+            int weeks = (nowUnix - loggedUser.codeStamp) / 604800;
+            if (weeks > 0)
+            {
+                for (int i = 0; i < weeks; i++)
+                {
+                    if (loggedUser.coronaCode > 1)
+                        loggedUser.coronaCode--;
+                    else
+                        break;
+                }
+                loggedUser.codeStamp = (int)time(0);
+                updateUser(loggedUser, false);
+            }
+        }
+
         time_t t = time(NULL);
         struct tm tm = *localtime(&t);
 
@@ -919,11 +943,15 @@ void panelMenu(user loggedUser)
                 puts("3.Visit area");
                 puts("4.Tests history");
                 puts("5.Visits history");
-                puts("6.Edit profile");
-                puts("7.Lock account");
-                puts("8.Exit app\n" RESET);
+                puts("6.Show hospitals");
+                puts("7.Corona statistics");
+                puts("8.Message to admin");
+                puts("9.Edit profile");
+                puts("10.Lock account");
+                puts("11.Exit app\n" RESET);
                 printf(FWHITE "Input: ");
             }
+            Choosed = 0;
 
             char input[25];
             fgets(input, 25, stdin); // To Get Spaces between characters too
@@ -950,54 +978,12 @@ void panelMenu(user loggedUser)
                             loggedUser.coronaCode = 4;
                             break;
                         }
-                        updateUser(loggedUser, false);
-                        int coronaCode = loggedUser.coronaCode;
-                        if (coronaCode == 3 || coronaCode == 4)
-                        {
-                            visits userVisits = getVisitedUsers(loggedUser.id);
-                            int nowUnix = time(0);
-                            for (int i = 0; i < userVisits.count; i++)
-                            {
-                                int visitUnix = userVisits.timestamps[i];
-                                if (((nowUnix - visitUnix) / 86400) <= 7)
-                                {
-                                    user target = getUserById(userVisits.ids[i]);
-                                    if (loggedUser.coronaCode == 3 && target.coronaCode < 2)
-                                    {
-                                        target.coronaCode = 2;
-                                        updateUser(target, false);
-                                    }
-                                    else if (loggedUser.coronaCode == 4 && target.coronaCode < 3)
-                                    {
-                                        target.coronaCode = 3;
-                                        updateUser(target, false);
-                                    }
-                                }
-                            }
-
-                            if (coronaCode == 4)
-                            {
-                                visits areaVisits = getVisitedAreas(loggedUser.id);
-                                for (int i = 0; i < areaVisits.count; i++)
-                                {
-                                    int visitUnix = areaVisits.timestamps[i];
-                                    if (((nowUnix - visitUnix) / 86400) <= 7)
-                                    {
-                                        int uCounts = 0;
-                                        user *targets = getUsersByAreaId(areaVisits.ids[i], &uCounts);
-                                        for (int i = 0; i < uCounts; i++)
-                                        {
-                                            targets[i].coronaCode = 1;
-                                            updateUser(targets[i], false);
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        loggedUser.codeStamp = (int)time(0);
+                        changeCodeRecursive(loggedUser.id, loggedUser.coronaCode);
 
                         char sql[5000];
                         sprintf(sql, "INSERT INTO CoronaTests (UserId, CoronaCode, Stamp) VALUES (%d, %d, %d)",
-                                loggedUser.id, loggedUser.coronaCode, time(0));
+                                loggedUser.id, loggedUser.coronaCode, (int)time(0));
                         if (mysql_query(con, sql))
                             finish_with_error(con);
                     }
@@ -1034,13 +1020,13 @@ void panelMenu(user loggedUser)
 
                         if (visited == 1)
                             sprintf(sql, "UPDATE UserVisits SET Stamp=%d WHERE UserId1=%d and UserId2=%d",
-                                    time(0), loggedUser.id, visitedUser.id);
+                                    (int)time(0), loggedUser.id, visitedUser.id);
                         else if (visited == 2)
                             sprintf(sql, "UPDATE UserVisits SET Stamp=%d WHERE UserId1=%d and UserId2=%d",
-                                    time(0), visitedUser.id, loggedUser.id);
+                                    (int)time(0), visitedUser.id, loggedUser.id);
                         else
                             sprintf(sql, "INSERT INTO UserVisits (UserId1, UserId2, Stamp) VALUES (%d, %d, %d)",
-                                    loggedUser.id, userId2, time(0));
+                                    loggedUser.id, userId2, (int)time(0));
 
                         if (mysql_query(con, sql))
                             finish_with_error(con);
@@ -1049,11 +1035,13 @@ void panelMenu(user loggedUser)
                         if (cCode > loggedUser.coronaCode + 1)
                         {
                             loggedUser.coronaCode = cCode - 1;
+                            loggedUser.codeStamp = (int)time(0);
                             updateUser(loggedUser, false);
                         }
                         else if (loggedUser.coronaCode > cCode + 1)
                         {
                             visitedUser.coronaCode = loggedUser.coronaCode - 1;
+                            visitedUser.codeStamp = (int)time(0);
                             updateUser(visitedUser, false);
                         }
                         printf(RESET FGREEN BOLD "Successfully added!\n");
@@ -1068,57 +1056,68 @@ void panelMenu(user loggedUser)
                 int mantaghe = getPositiveInt("Area ID", 0);
                 if (mantaghe != -1)
                 {
-                    bool visited = alreadyVisiteda(loggedUser.id, mantaghe);
-                    char sql[5000];
-                    if (visited)
-                        sprintf(sql, "UPDATE AreaVisits SET Stamp=%d WHERE UserId=%d and AreaId=%d",
-                                time(0), loggedUser.id, mantaghe);
+                    int cCode = cCodeByAreaId(mantaghe);
+                    if (cCode)
+                    {
+                        bool ok = 1;
+                        if (cCode == 2)
+                        {
+                            int CoNtiNue = ask("Area is Red! Continue?(y/n): ");
+                            if (CoNtiNue == -1 || CoNtiNue == 0)
+                                ok = 0;
+                            if (ok && loggedUser.coronaCode == 1)
+                            {
+                                loggedUser.coronaCode = 2;
+                                loggedUser.codeStamp = (int)time(0);
+                                updateUser(loggedUser, false);
+                            }
+                        }
+                        if (ok)
+                        {
+                            bool visited = alreadyVisiteda(loggedUser.id, mantaghe);
+                            char sql[5000];
+                            if (visited)
+                                sprintf(sql, "UPDATE AreaVisits SET Stamp=%d WHERE UserId=%d and AreaId=%d",
+                                        (int)time(0), loggedUser.id, mantaghe);
+                            else
+                                sprintf(sql, "INSERT INTO AreaVisits (UserId, AreaId, Stamp) VALUES (%d, %d, %d)",
+                                        loggedUser.id, mantaghe, (int)time(0));
+
+                            if (mysql_query(con, sql))
+                                finish_with_error(con);
+
+                            if (loggedUser.coronaCode == 4 && cCode == 1)
+                            {
+                                int count = 0;
+                                user *areaUsers = getUsersByAreaId(mantaghe, &count);
+                                if (count > 0)
+                                {
+                                    for (int i = 0; i < count; i++)
+                                    {
+                                        int cCode = areaUsers[i].coronaCode;
+                                        if (cCode == 1)
+                                        {
+                                            areaUsers[i].coronaCode = 2;
+                                            areaUsers[i].codeStamp = (int)time(0);
+                                            updateUser(areaUsers[i], false);
+                                        }
+                                    }
+                                }
+                            }
+                            printf(RESET FGREEN BOLD "Successfully added!\n");
+                            printf(RESET FWHITE "press any key to go back");
+                            getchar();
+                        }
+                    }
                     else
-                        sprintf(sql, "INSERT INTO AreaVisits (UserId, AreaId, Stamp) VALUES (%d, %d, %d)",
-                                loggedUser.id, mantaghe, time(0));
-
-                    if (mysql_query(con, sql))
-                        finish_with_error(con);
-
-                    if (loggedUser.coronaCode == 1)
                     {
-                        int count = 0;
-                        user *areaUsers = getUsersByAreaId(mantaghe, &count);
-                        if (count > 0)
-                        {
-                            for (int i = 0; i < count; i++)
-                            {
-                                int cCode = areaUsers[i].coronaCode;
-                                if (cCode == 2)
-                                {
-                                    loggedUser.coronaCode = 2;
-                                    updateUser(loggedUser, false);
-                                    break;
-                                }
-                            }
-                        }
+                        puts(RESET FRED "Area doesn't exist!" RESET FGREEN);
+                        Choosed = 0;
+                        getchar();
                     }
-                    else if (loggedUser.coronaCode == 4)
-                    {
-                        int count = 0;
-                        user *areaUsers = getUsersByAreaId(mantaghe, &count);
-                        if (count > 0)
-                        {
-                            for (int i = 0; i < count; i++)
-                            {
-                                int cCode = areaUsers[i].coronaCode;
-                                if (cCode == 1)
-                                {
-                                    areaUsers[i].coronaCode = 2;
-                                    updateUser(areaUsers[i], false);
-                                }
-                            }
-                        }
-                    }
-                    printf(RESET FGREEN BOLD "Successfully added!\n");
-                    printf(RESET FWHITE "press any key to go back");
-                    getchar();
                 }
+                else
+                    Choosed = 0;
             }
             else if (!strcmp(input, "4\n") || !strcmp(strlwr(input), "tests history\n"))
             {
@@ -1201,13 +1200,68 @@ void panelMenu(user loggedUser)
                 }
 
                 printf(RESET FWHITE "press any key to go back");
+                Choosed = 0;
                 getchar();
             }
-            else if (!strcmp(input, "6\n") || !strcmp(strlwr(input), "edit profile\n"))
+            else if (!strcmp(input, "6\n") || !strcmp(strlwr(input), "show hospitals\n"))
+            {
+                printf(CLEAR);
+                int mantaghe = getPositiveInt("Area ID", 0);
+                if (mantaghe != -1)
+                {
+                    printf(CLEAR);
+                    int count = 0;
+                    hospital *Hospitals = getHospitalsByAreaId(mantaghe, &count);
+                    printf(RESET FWHITE "%-3s%-30s\n", "", "Name");
+                    for (int i = 0; i < count; i++)
+                        printf(RESET FCYAN "%-3d%-30s\n", i + 1, Hospitals[i].name);
+                    printf(RESET FWHITE "press any key to go back");
+                    getchar();
+                }
+            }
+            else if (!strcmp(input, "7\n") || !strcmp(strlwr(input), "corona statistics\n"))
+            {
+                printf(CLEAR);
+                int allCases = usersCountBycCode(4, 0);
+                int stamp = (int)time(0) - 86400;
+                int dailyCases = usersCountBycCode(4, stamp);
+                printf(RESET FWHITE "%-15s%-30s\n", "All Cases", "Daily Cases");
+                printf(RESET FWHITE "%-15d%-30d\n", allCases, dailyCases);
+                printf(RESET FWHITE "press any key to go back");
+                getchar();
+            }
+            else if (!strcmp(input, "8\n") || !strcmp(strlwr(input), "message to admin\n"))
+            {
+                printf(CLEAR);
+                char text[1002] = {};
+                char temp[1002];
+                printf("Enter your message: ");
+                do
+                {
+                    fgets(temp, 1002, stdin);
+                    if (strcmp(temp, "\n") != 0)
+                    {
+                        strcat(text, temp);
+                        printf("------------------> ");
+                    }
+                } while (strcmp(temp, "\n") != 0);
+                if (strcmp(text, "\n") != 0)
+                {
+                    char sql[5000];
+                    sprintf(sql, "INSERT INTO Messages (FromId, ToId, Text, Stamp) VALUES (%d, %d, '%s', %d)",
+                            loggedUser.id, 0, text, (int)time(0));
+                    if (mysql_query(con, sql))
+                        finish_with_error(con);
+                    printf(RESET FGREEN BOLD "Successfully sent!\n");
+                    printf(RESET FWHITE "press any key to go back");
+                    getchar();
+                }
+            }
+            else if (!strcmp(input, "9\n") || !strcmp(strlwr(input), "edit profile\n"))
                 loggedUser = editNormalProfile(loggedUser);
-            else if (!strcmp(input, "7\n") || !strcmp(strlwr(input), "lock account\n"))
+            else if (!strcmp(input, "10\n") || !strcmp(strlwr(input), "lock account\n"))
                 break;
-            else if (!strcmp(input, "8\n") || !strcmp(strlwr(input), "exit app\n"))
+            else if (!strcmp(input, "11\n") || !strcmp(strlwr(input), "exit app\n"))
                 exit(0);
             else if (!strcmp(input, "-1\n"))
                 break;
@@ -1221,6 +1275,18 @@ void panelMenu(user loggedUser)
     }
     else if (loggedUser.type == 2)
     {
+        if (loggedUser.coronaCode == 2)
+        {
+            int nowUnix = (int)time(0);
+            int weeks = (nowUnix - loggedUser.codeStamp) / 604800;
+            if (weeks > 1)
+            {
+                loggedUser.coronaCode = 1;
+                loggedUser.codeStamp = (int)time(0);
+                updateUser(loggedUser, false);
+            }
+        }
+
         //Show time
         time_t t = time(NULL);
         struct tm tm = *localtime(&t);
@@ -1242,9 +1308,10 @@ void panelMenu(user loggedUser)
                 printf(RESET FWHITE "Your AreaId: %d\n\n", loggedUser.businfo.areaId);
 
                 puts(RESET FPANEL2 "1.Clear the place");
-                puts("2.Edit profile");
-                puts("3.Lock account");
-                puts("4.Exit app\n" RESET);
+                puts("2.Place corona statistics");
+                puts("3.Edit profile");
+                puts("4.Lock account");
+                puts("5.Exit app\n" RESET);
                 printf(FWHITE "Input: ");
             }
 
@@ -1255,28 +1322,40 @@ void panelMenu(user loggedUser)
                 if (loggedUser.coronaCode == 2)
                 {
                     loggedUser.coronaCode = 1;
+                    loggedUser.codeStamp = (int)time(0);
                     int count = 0;
                     user *users = getUsersByAreaId(loggedUser.businfo.areaId, &count);
                     char sql[5000];
                     for (int i = 0; i < count; i++)
                     {
-                        sprintf(sql, "UPDATE Users SET CoronaCode=1 WHERE Id=%d",
-                                users[i].id);
+                        sprintf(sql, "UPDATE Users SET CoronaCode=1, CodeStamp=%d WHERE Id=%d",
+                                (int)time(0), users[i].id);
                         if (mysql_query(con, sql))
                             finish_with_error(con);
                     }
                 }
             }
-            else if (!strcmp(input, "2\n") || !strcmp(strlwr(input), "edit profile\n"))
+            else if (!strcmp(input, "2\n") || !strcmp(strlwr(input), "place corona statistics\n"))
+            {
+                printf(CLEAR);
+                int count;
+                user *Users = visitedAreaUsers(loggedUser.businfo.areaId, &count);
+                printf(RESET FWHITE "%-15s%-15s\n", "Name", "Corona Code");
+                for (int i = 0; i < count; i++)
+                    printf(RESET FPANEL2 "%-15s%-15d\n", Users[i].name, Users[i].coronaCode);
+                printf(RESET FWHITE "press any key to go back");
+                getchar();
+            }
+            else if (!strcmp(input, "3\n") || !strcmp(strlwr(input), "edit profile\n"))
             {
                 loggedUser = editBusProfile(loggedUser);
             }
-            else if (!strcmp(input, "3\n") || !strcmp(strlwr(input), "lock account\n"))
+            else if (!strcmp(input, "4\n") || !strcmp(strlwr(input), "lock account\n"))
             {
                 Choosed = 3;
                 break;
             }
-            else if (!strcmp(input, "4\n") || !strcmp(strlwr(input), "exit app\n"))
+            else if (!strcmp(input, "5\n") || !strcmp(strlwr(input), "exit app\n"))
                 exit(0);
             else if (!strcmp(input, "-1\n"))
             {
@@ -1308,9 +1387,13 @@ void panelMenu(user loggedUser)
                 printf(RESET FWHITE "\t\t\t%d-%02d-%02d %02d:%02d:%02d\n", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
                 puts(RESET FADMIN "1.Show users");
                 puts("2.Change user status");
-                puts("3.Change password");
-                puts("4.Lock account");
-                puts("5.Exit app\n" RESET);
+                puts("3.Corona statistics");
+                puts("4.Add hospital");
+                puts("5.Show hospitals");
+                puts("6.Show messages");
+                puts("7.Change password");
+                puts("8.Lock account");
+                puts("9.Exit app\n" RESET);
                 printf(FWHITE "Input: ");
             }
             char input[25];
@@ -1324,20 +1407,30 @@ void panelMenu(user loggedUser)
                 user *AllUsers = getAllUsers(&count);
                 for (int i = 0; i < count; i++)
                 {
-                    char FullName[200];
+                    char FullName[202];
                     sprintf(FullName, "%s %s", AllUsers[i].name, AllUsers[i].lastName);
 
                     char CoronaCondition[50];
-                    if (AllUsers[i].coronaCode == 1)
-                        strcpy(CoronaCondition, RESET FWHITE "Healthy" RESET FADMIN);
-                    else if (AllUsers[i].coronaCode == 2)
-                        strcpy(CoronaCondition, RESET FYELLOW "Suspicious" RESET FADMIN);
-                    else if (AllUsers[i].coronaCode == 3)
-                        strcpy(CoronaCondition, RESET FORANGE "Dangerous" RESET FADMIN);
-                    else if (AllUsers[i].coronaCode == 4)
-                        strcpy(CoronaCondition, RESET FRED "Ill" RESET FADMIN);
-                    else if (AllUsers[i].coronaCode == -1)
-                        strcpy(CoronaCondition, RESET FRED BBLACK "DEAD" RESET FADMIN);
+                    if (AllUsers[i].type == 1)
+                    {
+                        if (AllUsers[i].coronaCode == 1)
+                            strcpy(CoronaCondition, RESET FWHITE "Healthy" RESET FADMIN);
+                        else if (AllUsers[i].coronaCode == 2)
+                            strcpy(CoronaCondition, RESET FYELLOW "Suspicious" RESET FADMIN);
+                        else if (AllUsers[i].coronaCode == 3)
+                            strcpy(CoronaCondition, RESET FORANGE "Dangerous" RESET FADMIN);
+                        else if (AllUsers[i].coronaCode == 4)
+                            strcpy(CoronaCondition, RESET FRED "Ill" RESET FADMIN);
+                        else if (AllUsers[i].coronaCode == -1)
+                            strcpy(CoronaCondition, RESET FRED BBLACK "DEAD" RESET FADMIN);
+                    }
+                    else
+                    {
+                        if (AllUsers[i].coronaCode == 1)
+                            strcpy(CoronaCondition, RESET FWHITE "White Area" RESET FADMIN);
+                        else if (AllUsers[i].coronaCode == 2)
+                            strcpy(CoronaCondition, RESET FRED "Red Area" RESET FADMIN);
+                    }
                     printf(RESET FADMIN "%-3d%-10d%-30s%-20s%-20s\n", i + 1, AllUsers[i].type, FullName, AllUsers[i].nationalCode, CoronaCondition);
                 }
                 printf(RESET FWHITE "press any key to go back");
@@ -1374,6 +1467,7 @@ void panelMenu(user loggedUser)
                                     printf(RESET FRED "Corona code can only be -1/1/2/3/4\n");
                             }
                             targetUser.coronaCode = inp;
+                            targetUser.codeStamp = (int)time(0);
                             updateUser(targetUser, false);
                             printf(RESET FGREEN BOLD "Successfully changed!\n");
                             printf(RESET FWHITE "press any key to go back");
@@ -1388,55 +1482,163 @@ void panelMenu(user loggedUser)
                     }
                 }
             }
-            else if (!strcmp(input, "3\n") || !strcmp(strlwr(input), "change password\n"))
+            else if (!strcmp(input, "3\n") || !strcmp(strlwr(input), "corona statistics\n"))
+            {
+                printf(CLEAR);
+                int allCases = usersCountBycCode(4, 0);
+                int stamp = (int)time(0) - 86400;
+                int dailyCases = usersCountBycCode(4, stamp);
+                printf(RESET FWHITE "%-15s%-30s\n", "All Cases", "Daily Cases");
+                printf(RESET FWHITE "%-15d%-30d\n", allCases, dailyCases);
+                printf(RESET FWHITE "press any key to go back");
+                getchar();
+            }
+            else if (!strcmp(input, "4\n") || !strcmp(strlwr(input), "add hospital\n"))
+            {
+                printf(CLEAR);
+                char *name;
+                int areaId;
+
+                name = getInputWithSpace(100, "Hospital name");
+                if (strcmp(name, "-1") != 0)
+                {
+                    bool exist = false;
+                    do
+                    {
+                        areaId = getPositiveInt("AreaId", 0);
+                        exist = areaExists(areaId);
+                        if (!exist)
+                            puts(RESET FRED "Area doesn't exist!" RESET FGREEN);
+                    } while (!exist && areaId != -1);
+                    if (exist)
+                    {
+                        char sql[5000];
+                        sprintf(sql, "INSERT INTO Hospitals (Name, AreaId) VALUES ('%s', %d)",
+                                name, areaId);
+                        if (mysql_query(con, sql))
+                            finish_with_error(con);
+                        printf(RESET FGREEN BOLD "Successfully Added!\n");
+                        printf(RESET FWHITE "press any key to go back");
+                        getchar();
+                    }
+                }
+            }
+            else if (!strcmp(input, "5\n") || !strcmp(strlwr(input), "show hospitals\n"))
+            {
+                printf(CLEAR);
+                printf(RESET FGREEN "%-3s%-30s%-20s\n", "", "Hospital Name", "AreaId");
+                printf(RESET FADMIN);
+                int count = 0;
+                hospital *hospitals = getAllHospitals(&count);
+                for (int i = 0; i < count; i++)
+                    printf(RESET FADMIN "%-3d%-30s%-20d\n", i + 1, hospitals[i].name, hospitals[i].areaId);
+                printf(RESET FWHITE "press any key to go back");
+                getchar();
+            }
+            else if (!strcmp(input, "6\n") || !strcmp(strlwr(input), "show messages\n"))
+            {
+                printf(CLEAR);
+                printf("Messages: \n");
+                int count = 0;
+                message *messages = getMessagesById(0, &count);
+                for (int x = 0; x < count; x++)
+                {
+                    char text[1002] = {};
+                    strcpy(text, messages[x].text);
+                    user selectedUser = getUserById(messages[x].fromId);
+                    printf(" -----------------------------------------------------------------------------\n");
+                    printf("| From: %s", selectedUser.name);
+                    for (int i = 0; i < 70 - strlen(selectedUser.name); printf(" "), i++)
+                        ;
+                    printf("|\n");
+                    printf("|-----------------------------------------------------------------------------|\n");
+                    printf("|                                                                             |\n");
+                    printf("| Text: ");
+
+                    char *ptr = text;
+                    int line = 1;
+                    int lineCount = countOfLines(text);
+                    for (int i = 0; i < lineCount; i++)
+                    {
+                        int printed = 0;
+                        int spaces = 1;
+                        while (1)
+                        {
+                            printf("%c", *ptr);
+                            printed++;
+                            ptr++;
+                            if (*ptr == '\n')
+                            {
+                                ptr++;
+                                break;
+                            }
+                        }
+                        if (line == 1)
+                        {
+                            spaces = 70 - printed;
+                        }
+                        else
+                        {
+                            spaces = 70 - printed;
+                        }
+                        for (int i = 0; i < spaces; printf(" "), i++)
+                            ;
+                        printf("|\n");
+                        line++;
+                        if (line == lineCount || !*ptr)
+                            break;
+                        printf("|       ");
+                    }
+                    printf("|                                                                             |\n");
+                    printf("|                                                                             |\n");
+                    printf(" ----------------------------------------------------------------------------- \n\n\n");
+                }
+                printf(RESET FWHITE "press any key to go back");
+                getchar();
+            }
+            else if (!strcmp(input, "7\n") || !strcmp(strlwr(input), "change password\n"))
             {
                 printf(CLEAR);
                 char *password;
                 printf(RESET FGREEN "New "); //To print new password
-                password = getPassword();
+                password = getPassword(false);
                 if (strcmp(password, "-1") != 0)
                 {
-                    char repeatOfPass[51];
-                    while (strcmp(repeatOfPass, password))
+                    char *repeatOfPass = "";
+                    while (strcmp(password, repeatOfPass) != 0)
                     {
-                        int i;
-                        char ch1;
-                        printf(RESET FGREEN "\nRepeat Password: " RESET FWHITE);
-                        for (i = 0; i < 50; i++)
+                        if (strcmp(password, "-1") == 0)
+                            break;
+
+                        char *repeatOfPass = getPassword(true);
+                        while (strcmp(password, repeatOfPass) != 0)
                         {
-                            ch1 = getch();
-                            if (ch1 != 10)
-                            {
-                                if (ch1 != 127)
-                                {
-                                    printf("*");
-                                    repeatOfPass[i] = ch1;
-                                }
-                                else if (i > 0)
-                                {
-                                    printf("\b \b");
-                                    i -= 2;
-                                }
-                                else
-                                    i = -1; // To not remove other strings!
-                            }
-                            else
+                            if (strcmp(repeatOfPass, "-1") == 0)
                                 break;
+                            else
+                            {
+                                if (strcmp(repeatOfPass, password) != 0)
+                                    puts(RESET FRED "The password and repeat of password dont match!" RESET FGREEN);
+                                repeatOfPass = getPassword(true);
+                            }
                         }
-                        repeatOfPass[i] = '\0';
-                        if (strcmp(repeatOfPass, password))
-                            puts(RESET FRED "\nThe password and repeat of password dont match!" RESET FGREEN);
+                        if (strcmp(repeatOfPass, "-1") == 0)
+                            password = getPassword(false);
+                        else
+                            break;
                     }
-                    printf("%c", '\n');
-                    strcpy(loggedUser.password, encrypt(password));
-                    updateUser(loggedUser, false);
-                    puts(RESET FGREEN BOLD "Password has been changed successfully!" RESET FWHITE);
-                    getchar();
+                    if (strcmp(password, "-1") != 0)
+                    {
+                        strcpy(loggedUser.password, encrypt(password));
+                        updateUser(loggedUser, false);
+                        puts(RESET FGREEN BOLD "Password has been changed successfully!" RESET FWHITE);
+                        getchar();
+                    }
                 }
             }
-            else if (!strcmp(input, "4\n") || !strcmp(strlwr(input), "lock account\n"))
+            else if (!strcmp(input, "8\n") || !strcmp(strlwr(input), "lock account\n"))
                 break;
-            else if (!strcmp(input, "5\n") || !strcmp(strlwr(input), "exit app\n"))
+            else if (!strcmp(input, "9\n") || !strcmp(strlwr(input), "exit app\n"))
                 exit(0);
             else if (!strcmp(input, "-1\n"))
                 break;
@@ -1584,43 +1786,37 @@ user editNormalProfile(user loggedUser)
         else if (!strcmp(input, "4\n") || !strcmp(strlwr(input), "password\n"))
         {
             printf(CLEAR);
-            char *password = getPassword();
+            char *password = getPassword(false);
             if (strcmp(password, "-1") != 0)
             {
-                char repeatOfPass[51];
-                while (strcmp(repeatOfPass, password))
+                char *repeatOfPass = "";
+                while (strcmp(password, repeatOfPass) != 0)
                 {
-                    int i;
-                    char ch1;
-                    printf(RESET FGREEN "\nRepeat Password: " RESET FWHITE);
-                    for (i = 0; i < 50; i++)
+                    if (strcmp(password, "-1") == 0)
+                        break;
+
+                    char *repeatOfPass = getPassword(true);
+                    while (strcmp(password, repeatOfPass) != 0)
                     {
-                        ch1 = getch();
-                        if (ch1 != 10)
-                        {
-                            if (ch1 != 127)
-                            {
-                                printf("*");
-                                repeatOfPass[i] = ch1;
-                            }
-                            else if (i > 0)
-                            {
-                                printf("\b \b");
-                                i -= 2;
-                            }
-                            else
-                                i = -1; // To not remove other strings!
-                        }
-                        else
+                        if (strcmp(repeatOfPass, "-1") == 0)
                             break;
+                        else
+                        {
+                            if (strcmp(repeatOfPass, password) != 0)
+                                puts(RESET FRED "The password and repeat of password dont match!" RESET FGREEN);
+                            repeatOfPass = getPassword(true);
+                        }
                     }
-                    repeatOfPass[i] = '\0';
-                    if (strcmp(repeatOfPass, password))
-                        puts(RESET FRED "\nThe password and repeat of password dont match!" RESET FGREEN);
+                    if (strcmp(repeatOfPass, "-1") == 0)
+                        password = getPassword(false);
+                    else
+                        break;
                 }
-                printf("%c", '\n');
-                strcpy(loggedUser.password, encrypt(password));
-                Choosed = 1;
+                if (strcmp(password, "-1") != 0)
+                {
+                    strcpy(loggedUser.password, encrypt(password));
+                    Choosed = 1;
+                }
             }
         }
         else if (!strcmp(input, "5\n") || !strcmp(strlwr(input), "email\n"))
@@ -1775,43 +1971,37 @@ user editBusProfile(user loggedUser)
         else if (!strcmp(input, "4\n") || !strcmp(strlwr(input), "password\n"))
         {
             printf(CLEAR);
-            char *password = getPassword();
+            char *password = getPassword(false);
             if (strcmp(password, "-1") != 0)
             {
-                char repeatOfPass[51];
-                while (strcmp(repeatOfPass, password))
+                char *repeatOfPass = "";
+                while (strcmp(password, repeatOfPass) != 0)
                 {
-                    int i;
-                    char ch1;
-                    printf(RESET FGREEN "\nRepeat Password: " RESET FWHITE);
-                    for (i = 0; i < 50; i++)
+                    if (strcmp(password, "-1") == 0)
+                        break;
+
+                    char *repeatOfPass = getPassword(true);
+                    while (strcmp(password, repeatOfPass) != 0)
                     {
-                        ch1 = getch();
-                        if (ch1 != 10)
-                        {
-                            if (ch1 != 127)
-                            {
-                                printf("*");
-                                repeatOfPass[i] = ch1;
-                            }
-                            else if (i > 0)
-                            {
-                                printf("\b \b");
-                                i -= 2;
-                            }
-                            else
-                                i = -1; // To not remove other strings!
-                        }
-                        else
+                        if (strcmp(repeatOfPass, "-1") == 0)
                             break;
+                        else
+                        {
+                            if (strcmp(repeatOfPass, password) != 0)
+                                puts(RESET FRED "The password and repeat of password dont match!" RESET FGREEN);
+                            repeatOfPass = getPassword(true);
+                        }
                     }
-                    repeatOfPass[i] = '\0';
-                    if (strcmp(repeatOfPass, password))
-                        puts(RESET FRED "\nThe password and repeat of password dont match!" RESET FGREEN);
+                    if (strcmp(repeatOfPass, "-1") == 0)
+                        password = getPassword(false);
+                    else
+                        break;
                 }
-                printf("%c", '\n');
-                strcpy(loggedUser.password, encrypt(password));
-                Choosed = 1;
+                if (strcmp(password, "-1") != 0)
+                {
+                    strcpy(loggedUser.password, encrypt(password));
+                    Choosed = 1;
+                }
             }
         }
         else if (!strcmp(input, "5\n") || !strcmp(strlwr(input), "email\n"))
@@ -1962,8 +2152,8 @@ user login(char *username, char *password)
 void updateUser(user theUser, bool shouldUpdateInfo)
 {
     char sql[5000];
-    sprintf(sql, "UPDATE Users SET FirstName='%s', LastName= '%s', NationalCode= '%s', Username= '%s', Password= '%s', Email= '%s', CoronaCode= '%d' WHERE Id=%d",
-            theUser.name, theUser.lastName, theUser.nationalCode, theUser.username, theUser.password, theUser.email, theUser.coronaCode, theUser.id);
+    sprintf(sql, "UPDATE Users SET FirstName='%s', LastName= '%s', NationalCode= '%s', Username= '%s', Password= '%s', Email= '%s', CoronaCode=%d, CodeStamp=%d WHERE Id=%d",
+            theUser.name, theUser.lastName, theUser.nationalCode, theUser.username, theUser.password, theUser.email, theUser.coronaCode, theUser.codeStamp, theUser.id);
 
     if (mysql_query(con, sql))
         finish_with_error(con);
@@ -1972,12 +2162,12 @@ void updateUser(user theUser, bool shouldUpdateInfo)
     {
         if (theUser.type == 1)
         {
-            sprintf(sql, "UPDATE NormalInfo SET BloodGroup='%s', Age= '%d', Height= '%d', Weight= '%d' WHERE UserId=%d",
+            sprintf(sql, "UPDATE NormalInfo SET BloodGroup='%s', Age=%d, Height=%d, Weight=%d WHERE UserId=%d",
                     theUser.normalinfo.bloodGroup, theUser.normalinfo.age, theUser.normalinfo.height, theUser.normalinfo.weight, theUser.id);
         }
         else
         {
-            sprintf(sql, "UPDATE BusInfo SET PlaceName='%s', CityName= '%s', AreaId= '%d' WHERE UserId=%d",
+            sprintf(sql, "UPDATE BusInfo SET PlaceName='%s', CityName= '%s', AreaId=%d WHERE UserId=%d",
                     theUser.businfo.placeName, theUser.businfo.cityName, theUser.businfo.areaId, theUser.id);
         }
         if (mysql_query(con, sql))
@@ -2053,6 +2243,7 @@ user getUserById(int userId)
     strcpy(loggedUser.password, row[6]);
     strcpy(loggedUser.email, row[7]);
     sscanf(row[8], "%d", &loggedUser.coronaCode);
+    sscanf(row[9], "%d", &loggedUser.codeStamp);
     if (loggedUser.type == 1)
     {
         sprintf(sql, "SELECT * FROM NormalInfo Where UserId=%d", loggedUser.id);
@@ -2137,6 +2328,100 @@ user *getUsersByAreaId(int areaId, int *count)
     return users;
 }
 
+user *visitedAreaUsers(int areaId, int *count)
+{
+    char sql[5000];
+    sprintf(sql, "SELECT * FROM AreaVisits Where AreaId=%d", areaId);
+    if (mysql_query(con, sql))
+        finish_with_error(con);
+
+    MYSQL_RES *result = mysql_store_result(con);
+
+    if (result == NULL)
+        finish_with_error(con);
+
+    int num_fields = mysql_num_fields(result);
+
+    MYSQL_ROW row;
+    MYSQL_FIELD *field;
+
+    user *users = malloc(sizeof(user));
+    *count = 0;
+    while ((row = mysql_fetch_row(result)))
+    {
+        (*count)++;
+        if (*count != 1)
+            users = realloc(users, *count * sizeof(user));
+        int uid;
+        sscanf(row[0], "%d", &uid);
+        users[*count - 1] = getUserById(uid);
+    }
+    mysql_free_result(result);
+    return users;
+}
+
+hospital *getHospitalsByAreaId(int areaId, int *count)
+{
+    char sql[5000];
+    sprintf(sql, "SELECT * FROM Hospitals Where AreaId=%d", areaId);
+    if (mysql_query(con, sql))
+        finish_with_error(con);
+
+    MYSQL_RES *result = mysql_store_result(con);
+
+    if (result == NULL)
+        finish_with_error(con);
+
+    int num_fields = mysql_num_fields(result);
+
+    MYSQL_ROW row;
+    MYSQL_FIELD *field;
+
+    hospital *hospitals = malloc(sizeof(hospital));
+    *count = 0;
+    while ((row = mysql_fetch_row(result)))
+    {
+        (*count)++;
+        if (*count != 1)
+            hospitals = realloc(hospitals, *count * sizeof(hospital));
+        strcpy(hospitals[*count - 1].name, row[1]);
+    }
+    mysql_free_result(result);
+    return hospitals;
+}
+
+message *getMessagesById(int toId, int *count)
+{
+    char sql[5000];
+    sprintf(sql, "SELECT * FROM Messages Where ToId=%d", toId);
+    if (mysql_query(con, sql))
+        finish_with_error(con);
+
+    MYSQL_RES *result = mysql_store_result(con);
+
+    if (result == NULL)
+        finish_with_error(con);
+
+    int num_fields = mysql_num_fields(result);
+
+    MYSQL_ROW row;
+    MYSQL_FIELD *field;
+
+    message *messages = malloc(sizeof(message));
+    *count = 0;
+    while ((row = mysql_fetch_row(result)))
+    {
+        (*count)++;
+        if (*count != 1)
+            messages = realloc(messages, *count * sizeof(message));
+        messages[*count - 1].toId = toId;
+        sscanf(row[0], "%d", &messages[*count - 1].fromId);
+        strcpy(messages[*count - 1].text, row[2]);
+    }
+    mysql_free_result(result);
+    return messages;
+}
+
 user *getAllUsers(int *count)
 {
     char sql[5000];
@@ -2172,10 +2457,46 @@ user *getAllUsers(int *count)
         strcpy(selectedUser.password, row[6]);
         strcpy(selectedUser.email, row[7]);
         sscanf(row[8], "%d", &selectedUser.coronaCode);
+        sscanf(row[9], "%d", &selectedUser.codeStamp);
         users[*count - 1] = selectedUser;
     }
     mysql_free_result(result);
     return users;
+}
+
+hospital *getAllHospitals(int *count)
+{
+    char sql[5000];
+    sprintf(sql, "SELECT * FROM Hospitals");
+    if (mysql_query(con, sql))
+        finish_with_error(con);
+
+    MYSQL_RES *result = mysql_store_result(con);
+
+    if (result == NULL)
+        finish_with_error(con);
+
+    int num_fields = mysql_num_fields(result);
+
+    MYSQL_ROW row;
+    MYSQL_FIELD *field;
+
+    hospital *hospitals = malloc(sizeof(hospital));
+    *count = 0;
+    while ((row = mysql_fetch_row(result)))
+    {
+        (*count)++;
+        if (*count != 1)
+            hospitals = realloc(hospitals, *count * sizeof(hospital));
+
+        hospital selectedHospital;
+        sscanf(row[0], "%d", &selectedHospital.id);
+        strcpy(selectedHospital.name, row[1]);
+        sscanf(row[2], "%d", &selectedHospital.areaId);
+        hospitals[*count - 1] = selectedHospital;
+    }
+    mysql_free_result(result);
+    return hospitals;
 }
 
 visits getVisitedUsers(int userId)
@@ -2324,4 +2645,141 @@ bool resetPassUserExists(char *username, char *email, char *natCode)
 
     mysql_free_result(result);
     return res;
+}
+
+bool areaExists(int areaId)
+{
+    char sql[5000];
+    sprintf(sql, "SELECT * FROM BusInfo Where AreaId=%d Limit 1", areaId);
+    if (mysql_query(con, sql))
+        finish_with_error(con);
+
+    MYSQL_RES *result = mysql_store_result(con);
+
+    if (result == NULL)
+        finish_with_error(con);
+
+    if (mysql_fetch_row(result))
+        return true;
+    else
+        return false;
+}
+
+int cCodeByAreaId(int areaId)
+{
+    char sql[5000];
+    sprintf(sql, "SELECT * FROM BusInfo Where AreaId=%d Limit 1", areaId);
+    if (mysql_query(con, sql))
+        finish_with_error(con);
+
+    MYSQL_RES *result = mysql_store_result(con);
+
+    if (result == NULL)
+        finish_with_error(con);
+
+    int num_fields = mysql_num_fields(result);
+
+    MYSQL_ROW row;
+    MYSQL_FIELD *field;
+
+    if (row = mysql_fetch_row(result))
+    {
+        int userId;
+        sscanf(row[0], "%d", &userId);
+        mysql_free_result(result);
+
+        sprintf(sql, "SELECT * FROM Users Where Id=%d Limit 1", userId);
+        if (mysql_query(con, sql))
+            finish_with_error(con);
+
+        MYSQL_RES *result = mysql_store_result(con);
+
+        if (result == NULL)
+            finish_with_error(con);
+
+        int num_fields = mysql_num_fields(result);
+
+        MYSQL_ROW row;
+        MYSQL_FIELD *field;
+
+        int coronaCode;
+        row = mysql_fetch_row(result);
+        sscanf(row[8], "%d", &coronaCode);
+        mysql_free_result(result);
+
+        return coronaCode;
+    }
+    else
+        return 0;
+}
+
+int usersCountBycCode(int cCode, int stamp)
+{
+    char sql[5000];
+    sprintf(sql, "SELECT COUNT(*) FROM Users Where CoronaCode = %d AND CodeStamp >= %d", cCode, stamp);
+    if (mysql_query(con, sql))
+        finish_with_error(con);
+
+    MYSQL_RES *result = mysql_store_result(con);
+
+    if (result == NULL)
+        finish_with_error(con);
+
+    int num_fields = mysql_num_fields(result);
+
+    MYSQL_ROW row;
+    MYSQL_FIELD *field;
+
+    if (row = mysql_fetch_row(result))
+    {
+        int count;
+        sscanf(row[0], "%d", &count);
+        mysql_free_result(result);
+        return count;
+    }
+    else
+        return 0;
+}
+
+void changeCodeRecursive(int userId, int cCode)
+{
+    int nowUnix = (int)time(0);
+    user User = getUserById(userId);
+    User.coronaCode = cCode;
+    User.codeStamp = nowUnix;
+    updateUser(User, false);
+    if (cCode == 3 || cCode == 4)
+    {
+        visits userVisits = getVisitedUsers(userId);
+        for (int i = 0; i < userVisits.count; i++)
+        {
+            if (((nowUnix - userVisits.timestamps[i]) / 86400) <= 7)
+            {
+                user Target = getUserById(userVisits.ids[i]);
+                if (Target.coronaCode < cCode - 1)
+                {
+                    changeCodeRecursive(userVisits.ids[i], cCode - 1);
+                }
+            }
+        }
+    }
+    if (cCode == 4)
+    {
+        visits areaVisits = getVisitedAreas(userId);
+        for (int i = 0; i < areaVisits.count; i++)
+        {
+            int visitUnix = areaVisits.timestamps[i];
+            if (((nowUnix - visitUnix) / 86400) <= 7)
+            {
+                int uCounts = 0;
+                user *targets = getUsersByAreaId(areaVisits.ids[i], &uCounts);
+                for (int i = 0; i < uCounts; i++)
+                {
+                    targets[i].coronaCode = 2;
+                    targets[i].codeStamp = (int)time(0);
+                    updateUser(targets[i], false);
+                }
+            }
+        }
+    }
 }

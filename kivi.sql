@@ -1,5 +1,7 @@
 create database kivi_db;
 
+USE kivi_db;
+
 CREATE TABLE Users (
     Id int NOT NULL AUTO_INCREMENT,
     Type int NOT NULL,
@@ -10,6 +12,7 @@ CREATE TABLE Users (
     Password varchar(50) NOT NULL,
     Email varchar(100) NOT NULL,
     CoronaCode int NOT NULL,
+    CodeStamp int NOT NULL,
     PRIMARY KEY (ID)
 );
 
@@ -30,6 +33,13 @@ CREATE TABLE BusInfo (
     PRIMARY KEY (UserId)
 );
 
+CREATE TABLE Hospitals (
+    Id int NOT NULL AUTO_INCREMENT,
+    Name varchar(100) NOT NULL,
+    AreaId int NOT NULL,
+    PRIMARY KEY (Id)
+);
+
 CREATE TABLE AreaVisits (
     UserId int NOT NULL,
     AreaId int NOT NULL,
@@ -48,6 +58,13 @@ CREATE TABLE CoronaTests (
     Stamp int NOT NULL
 );
 
-INSERT INTO Users (Type, FirstName, LastName, NationalCode, Username, Password, Email, CoronaCode)
-VALUES (3, 'admin', 'admin', '0', 'admin', 'firns678', 'admin', 0);
+CREATE TABLE Messages (
+    FromId int NOT NULL,
+    ToId int NOT NULL,
+    Text varchar(1000) NOT NULL,
+    Stamp int NOT NULL
+);
+
+INSERT INTO Users (Type, FirstName, LastName, NationalCode, Username, Password, Email, CoronaCode, CodeStamp)
+VALUES (3, 'admin', 'admin', '0', 'admin', 'firns678', 'admin', 0, 0);
 //firns678 = admin123
