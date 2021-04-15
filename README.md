@@ -1,0 +1,1 @@
+Simple anti corona project
